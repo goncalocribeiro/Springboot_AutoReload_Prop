@@ -24,7 +24,7 @@ public class PulsarController {
         return profileProp;
     }
 
-    @PostMapping(value="/send")
+    @PostMapping(value="/produce")
     public ResponseEntity<Boolean> sendToPulsar() throws PulsarClientException {
         return ResponseEntity.ok(pulsarService.produce());
     }
