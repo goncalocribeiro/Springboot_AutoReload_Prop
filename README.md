@@ -1,4 +1,14 @@
 # Springboot_AutoReload_Prop
 
-This project shows how to reload a Spring application, without the need to restart the server. By doing this, we can
+This project shows how to update a Spring application properties, without the need to restart the server. By doing this, we can
 remove the downtime of a service anytime we need to update configurations.
+
+This app, also produces and consume to/from Pulsar topics, using the properties defined in the .properties file that's present in the remote repository.
+
+When updating the properties in this remote file, and in order to update de values of the @value variables, the endpoint <appUrl>/actuator/refresh must be called.
+
+**** Pulsar ****
+- Encrypted namespace: Need to create encryption keys and configure producer and consumer to use it
+  - https://pulsar.apache.org/docs/en/security-encryption/
+  - peek messages in subscription backlog is not allowed
+  - consumer needs the private key to decrypt messages

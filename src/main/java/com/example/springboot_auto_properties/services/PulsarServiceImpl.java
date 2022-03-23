@@ -1,25 +1,17 @@
-package com.example.springboot_auto_properties.controllers;
+package com.example.springboot_auto_properties.services;
 
 import client.AuthenticationSibs;
-import com.example.springboot_auto_properties.config.PropertyConfiguration;
+import com.example.springboot_auto_properties.utils.RawFileKeyReader;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.*;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.stereotype.Service;
 
-import java.util.stream.IntStream;
-
-@RestController
-@RefreshScope
 @Slf4j
-public class DemoController {
-    @Value("${demo.service.profileProp}")
-    private String profileProp;
-
+@RefreshScope
+@Service
+public class PulsarServiceImpl implements PulsarService {
     @Value("${pulsar.service.url}")
     private String SERVICE_URL;
 
@@ -38,19 +30,20 @@ public class DemoController {
     @Value("${pulsar.producer.defaultMsg}")
     private String PULSAR_PRODUCER_DEFAULT_MESSAGE;
 
-    @Autowired
-    private PropertyConfiguration propertyConfiguration;
+    @Value("${pulsar.consumer.subscription}")
+    private String PULSAR_CONSUMER_SUBSCRIPTION;
 
-    @GetMapping(value="/profile")
-    public String getProfileProp(){
-        return profileProp;
-    }
+    //Local
+    private String LOCAL_PUB_KEY = "src/main/resources/test_ecdsa_pubkey.pem";
+    private String LOCAL_PRV_KEY = "src/main/resources/test_ecdsa_prvkey.pem";
 
-    @PostMapping(value="/send")
-    public boolean sendToPulsar() throws PulsarClientException {
-        AuthenticationSibs authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
+    AuthenticationSibs authSibs;
+    PulsarClient client;
+    Consumer consumer;
 
-        PulsarClient client = null;
+    @Override
+    public Boolean produce() throws PulsarClientException {
+        authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
         try {
             client = PulsarClient.builder()
                     .serviceUrl(SERVICE_URL)
@@ -66,7 +59,8 @@ public class DemoController {
         try {
             producer = client.newProducer(Schema.STRING)
                     .topic(TOPIC_NAME)
-                    
+                    .addEncryptionKey("myAppTestKey")
+                    .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
                     .create();
         } catch (PulsarClientException e) {
             log.error("Error creating Pulsar Producer");
@@ -74,8 +68,8 @@ public class DemoController {
             return false;
         }
 
-        /*Producer<String> finalProducer = producer;
-        IntStream.range(1, 5).forEach(i -> {
+        Producer<String> finalProducer = producer;
+        for (int i=0; i<10; i++) {
             String content = PULSAR_PRODUCER_DEFAULT_MESSAGE + "-" + i;
 
             try {
@@ -93,11 +87,43 @@ public class DemoController {
                     }
                 }
             }
-        });
+        }
 
-        finalProducer.close();*/
+        finalProducer.close();
         client.close();
 
         return true;
+    }
+
+    @Override
+    public void consume() throws PulsarClientException {
+        authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
+        client = PulsarClient.builder()
+                .serviceUrl(SERVICE_URL)
+                .authentication(authSibs)
+                .build();
+
+        consumer = client.newConsumer()
+                .topic(TOPIC_NAME)
+                .subscriptionName(PULSAR_CONSUMER_SUBSCRIPTION)
+                .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
+                .subscribe();
+        Message msg = null;
+
+        while(true) {
+            msg = consumer.receive();
+            // do something
+            System.out.println("Received: " + new String(msg.getData()));
+            consumer.acknowledge(msg);
+        }
+
+        // Acknowledge the consumption of all messages at once
+        //consumer.acknowledgeCumulative(msg);
+    }
+
+    @Override
+    public void stopConsume() throws PulsarClientException {
+        consumer.close();
+        client.close();
     }
 }
