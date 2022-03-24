@@ -5,8 +5,12 @@ remove the downtime of a service anytime we need to update configurations.
 
 This app, also produces and consume to/from Pulsar topics, using the properties defined in the .properties file that's present in the remote repository.
 
-When updating the properties in this remote file, and in order to update de values of the @value variables, the endpoint <appUrl>/actuator/refresh must be called.
+When updating the properties in this remote file, and in order to update de values of the @Value variables, the endpoint <appUrl>/actuator/refresh must be called.
 
+**** Properties Server ****
+  
+  https://github.com/goncalocribeiro/springboot-prop-reader
+  
 **** Environments ****
   
   To set the desired environment (dev, pre, pro, etc), this definition is made in the src/main/resources/bootstrap.properties file.
