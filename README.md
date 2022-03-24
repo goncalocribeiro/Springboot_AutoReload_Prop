@@ -7,6 +7,18 @@ This app, also produces and consume to/from Pulsar topics, using the properties 
 
 When updating the properties in this remote file, and in order to update de values of the @value variables, the endpoint <appUrl>/actuator/refresh must be called.
 
+**** Environments ****
+  
+  To set the desired environment (dev, pre, pro, etc), this definition is made in the src/main/resources/bootstrap.properties file.
+  
+  Setting the value spring.profiles.active=dev will then use the file demo-service-dev.properties.
+  
+  If the value is pro, then the properties file used will be demo-service-pro.properties.
+  
+**** Properties repository ****
+  
+  https://github.com/goncalocribeiro/SpringbootConfigRepo
+  
 **** Pulsar ****
 - Encrypted namespace: Need to create encryption keys and configure producer and consumer to use it
   - https://pulsar.apache.org/docs/en/security-encryption/
