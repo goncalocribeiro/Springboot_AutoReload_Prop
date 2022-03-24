@@ -19,21 +19,39 @@ public class PulsarController {
     @Autowired
     PulsarService pulsarService;
 
+    /**
+     *
+     * @return
+     */
     @GetMapping(value="/profile")
     public String getProfileProp(){
         return profileProp;
     }
 
-    @PostMapping(value="/produce")
-    public ResponseEntity<Boolean> sendToPulsar() throws PulsarClientException {
-        return ResponseEntity.ok(pulsarService.produce());
+    /**
+     * Function to produce messages to a Pulsar topic in an encrypted namespace
+     * All the needed properties are settled in the .properties file in github repository: https://github.com/goncalocribeiro/SpringbootConfigRepo
+     * @return String message
+     */
+    @PostMapping(value="/produceEncrypt")
+    public ResponseEntity<String> produceEncrypt() {
+        return ResponseEntity.ok(pulsarService.produceEncrypt());
     }
 
-    @PostMapping(value="/consume")
-    public void consumeFromPulsar() throws PulsarClientException {
-        pulsarService.consume();
+    /**
+     * Function to consume messages from a Pulsar topic in an encrypted namespace
+     * All the needed properties are settled in the .properties file in github repository: https://github.com/goncalocribeiro/SpringbootConfigRepo
+     * @throws PulsarClientException
+     */
+    @PostMapping(value="/consumeEncrypt")
+    public void consumeEncrypt() throws PulsarClientException {
+        pulsarService.consumeEncrypt();
     }
 
+    /**
+     *
+     * @throws PulsarClientException
+     */
     @PostMapping(value="/stopConsume")
     public void stopConsumeFromPulsar() throws PulsarClientException {
         pulsarService.stopConsume();
