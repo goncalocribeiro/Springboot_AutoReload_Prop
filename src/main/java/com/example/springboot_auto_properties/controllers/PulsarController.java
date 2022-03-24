@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -29,13 +30,13 @@ public class PulsarController {
     }
 
     /**
-     * Function to produce messages to a Pulsar topic in an encrypted namespace
+     * Function to produce messages to a Pulsar topic
      * All the needed properties are settled in the .properties file in github repository: https://github.com/goncalocribeiro/SpringbootConfigRepo
      * @return String message
      */
-    @PostMapping(value="/produceEncrypt")
-    public ResponseEntity<String> produceEncrypt() {
-        return ResponseEntity.ok(pulsarService.produceEncrypt());
+    @PostMapping(value="/produce")
+    public ResponseEntity<String> produce(@RequestParam Boolean encrypted) {
+        return ResponseEntity.ok(pulsarService.produce(encrypted));
     }
 
     /**
@@ -49,7 +50,7 @@ public class PulsarController {
     }
 
     /**
-     *
+     * Function to stop Pulsar consumers
      * @throws PulsarClientException
      */
     @PostMapping(value="/stopConsume")

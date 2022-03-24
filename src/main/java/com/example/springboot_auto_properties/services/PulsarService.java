@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public interface PulsarService {
-    public String produceEncrypt();
+    public String produce(Boolean encrypted);
     public void consumeEncrypt() throws PulsarClientException;
     public void stopConsume() throws PulsarClientException;
 }

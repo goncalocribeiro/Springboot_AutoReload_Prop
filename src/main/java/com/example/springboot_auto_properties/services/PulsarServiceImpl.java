@@ -16,6 +16,9 @@ public class PulsarServiceImpl implements PulsarService {
     @Value("${pulsar.service.url}")
     private String SERVICE_URL;
 
+    @Value("${pulsar.encryptedTopic}")
+    private String ENCRYPTED_TOPIC_NAME;
+
     @Value("${pulsar.topic}")
     private String TOPIC_NAME;
 
@@ -31,6 +34,9 @@ public class PulsarServiceImpl implements PulsarService {
     @Value("${pulsar.producer.defaultMsg}")
     private String PULSAR_PRODUCER_DEFAULT_MESSAGE;
 
+    @Value("${pulsar.producer.encryptedMsg}")
+    private String PULSAR_PRODUCER_ENCRYPTED_MESSAGE;
+
     @Value("${pulsar.consumer.subscription}")
     private String PULSAR_CONSUMER_SUBSCRIPTION;
 
@@ -44,25 +50,37 @@ public class PulsarServiceImpl implements PulsarService {
     Producer<String> pulsarProducer;
 
     String errorMsg="";
+    String topic="";
+
+    private Producer<String> buildProducer() throws PulsarClientException {
+        return pulsarClient.newProducer(Schema.STRING)
+                .topic(topic)
+                .create();
+    }
+
+    private Producer<String> buildEncryptedProducer() throws PulsarClientException {
+        return pulsarClient.newProducer(Schema.STRING)
+                .topic(topic)
+                .addEncryptionKey("myAppTestKey")
+                .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
+                .create();
+    }
 
     @Override
-    public String produceEncrypt() {
+    public String produce(Boolean encrypted) {
         authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
 
+        topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
         try {
             pulsarClient = PulsarClient.builder()
                     .serviceUrl(SERVICE_URL)
                     .authentication(authSibs)
                     .build();
 
-            pulsarProducer = pulsarClient.newProducer(Schema.STRING)
-                    .topic(TOPIC_NAME)
-                    .addEncryptionKey("myAppTestKey")
-                    .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
-                    .create();
+            pulsarProducer = encrypted ? buildEncryptedProducer() : buildProducer();
 
             for (int i=0; i<10; i++) {
-                String content = PULSAR_PRODUCER_DEFAULT_MESSAGE + "-" + i;
+                String content = encrypted ? PULSAR_PRODUCER_ENCRYPTED_MESSAGE + "-" + i : PULSAR_PRODUCER_DEFAULT_MESSAGE + "-" + i;
 
                 log.info("******* Sending message: " + content);
                 MessageId msgId = pulsarProducer.send(content);
@@ -74,7 +92,7 @@ public class PulsarServiceImpl implements PulsarService {
             errorMsg = "Error creating Pulsar Producer";
             log.error(errorMsg);
             e.printStackTrace();
-           return errorMsg;
+            return errorMsg;
         } catch (Exception e) {
             errorMsg = "Error creating Pulsar Client";
             log.error(errorMsg);
