@@ -4,11 +4,16 @@ import client.AuthenticationSibs;
 import com.example.springboot_auto_properties.utils.RawFileKeyReader;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.*;
+import org.apache.pulsar.client.impl.BatchMessageIdImpl;
+import org.apache.pulsar.client.impl.MessageIdImpl;
+import org.apache.pulsar.common.api.raw.RawMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 @Slf4j
@@ -33,6 +38,9 @@ public class PulsarServiceImpl implements PulsarService {
 
     @Value("${pulsar.consumer.defaultSubscription}")
     private String PULSAR_CONSUMER_DEFAULT_SUBSCRIPTION;
+
+    @Value("${pulsar.reader.defaultSubscription}")
+    private String PULSAR_READER_SUBSCRIPTION;
 
     //Local
     private String LOCAL_PUB_KEY = "src/main/resources/test_ecdsa_pubkey.pem";
@@ -139,11 +147,13 @@ public class PulsarServiceImpl implements PulsarService {
     /**
      *
      * @param encrypted
-     * @param messageId can be MessageId.earliest, MessageId.latest, <messageId>
+     * @param messageId can be MessageId.earliest, MessageId.latest, <messageId> in format <ledgerId>:<entryId>:<partitionIndex>
+     * @param readOnlyOnce - boolean to indicate if should read only one message
      */
     @Override
-    public String read(Boolean encrypted, String messageId) {
+    public String read(Boolean encrypted, String messageId, Boolean readOnlyOnce) throws IOException {
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
+        log.info("Reading from topic: " + topic);
 
         switch (messageId.toUpperCase()){
             case "E":
@@ -155,10 +165,20 @@ public class PulsarServiceImpl implements PulsarService {
             default:
                 if (messageId != null && !messageId.isEmpty()){
                     log.info("Trying to read messageId: " + messageId);
+                    String[] messageIdComponents = messageId.split(":");
+                    if(messageIdComponents.length != 3) {
+                        this.messageId = null;
+                        break;
+                    }
+
+                    long ledgerId = Long.parseLong(messageIdComponents[0]);
+                    long entryId = Long.parseLong(messageIdComponents[1]);
+                    int partitionIndex = Integer.parseInt(messageIdComponents[2]);
+
+                    log.info("ledgerId: " + ledgerId + ", entryId: " + entryId + ", partitionIndex: " + partitionIndex);
+
+                    this.messageId = new MessageIdImpl(ledgerId, entryId, partitionIndex);
                 }
-                //byte[] msgIdBytes = // Some byte array
-                //this.messageId = MessageId.fromByteArray(msgIdBytes);
-                this.messageId = null;
         }
 
         if (this.messageId == null) {
@@ -168,6 +188,7 @@ public class PulsarServiceImpl implements PulsarService {
         try {
             pulsarReader = pulsarClient.newReader()
                     .topic(topic)
+                    .subscriptionName(PULSAR_READER_SUBSCRIPTION)
                     .startMessageId(this.messageId)
                     .create();
         } catch (PulsarClientException e) {
@@ -176,12 +197,17 @@ public class PulsarServiceImpl implements PulsarService {
         }
 
         if (pulsarReader != null) {
-            while(true){
+            while(pulsarReader.hasMessageAvailable()){
                 try {
                     Message message = pulsarReader.readNext();
                     log.info("Pulsar Reader | Message Id: " + message.getMessageId().toString());
                     log.info("Pulsar Reader | Message producer: " + message.getProducerName());
-                    log.info("Pulsar Reader | Message string: " + message.toString());
+                    log.info("Pulsar Reader | Message string: " + new String(message.getData()));
+
+                    if (readOnlyOnce) {
+                        //Reads only one message
+                        break;
+                    }
                 } catch (PulsarClientException e) {
                     log.error("Error reading message");
                     e.printStackTrace();
@@ -189,6 +215,7 @@ public class PulsarServiceImpl implements PulsarService {
             }
         }
 
+        pulsarReader.close(); //to delete reader subscription
         return "Finished reading";
     }
 }

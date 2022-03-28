@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+
 @RestController
 @Slf4j
 public class PulsarController {
@@ -62,7 +64,8 @@ public class PulsarController {
 
     @PostMapping(value="/read")
     public ResponseEntity<String> readFromPulsar(@RequestParam Boolean encrypted,
-                               @RequestParam String messageId) {
-        return ResponseEntity.ok(pulsarService.read(encrypted, messageId));
+                                                 @RequestParam String messageId,
+                                                 @RequestParam Boolean readOnlyOnce) throws IOException {
+        return ResponseEntity.ok(pulsarService.read(encrypted, messageId, readOnlyOnce));
     }
 }
