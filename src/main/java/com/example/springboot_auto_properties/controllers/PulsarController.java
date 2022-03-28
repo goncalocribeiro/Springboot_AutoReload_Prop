@@ -6,6 +6,7 @@ import org.apache.pulsar.client.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,8 +36,9 @@ public class PulsarController {
      * @return String message
      */
     @PostMapping(value="/produce")
-    public ResponseEntity<String> produce(@RequestParam Boolean encrypted) {
-        return ResponseEntity.ok(pulsarService.produce(encrypted));
+    public ResponseEntity<String> produce(@RequestParam Boolean encrypted,
+                                          @RequestParam String msg) {
+        return ResponseEntity.ok(pulsarService.produce(encrypted, msg));
     }
 
     /**
@@ -56,5 +58,11 @@ public class PulsarController {
     @PostMapping(value="/stopConsume")
     public void stopConsumeFromPulsar() throws PulsarClientException {
         pulsarService.stopConsume();
+    }
+
+    @PostMapping(value="/read")
+    public ResponseEntity<String> readFromPulsar(@RequestParam Boolean encrypted,
+                               @RequestParam String messageId) {
+        return ResponseEntity.ok(pulsarService.read(encrypted, messageId));
     }
 }

@@ -4,32 +4,23 @@ import client.AuthenticationSibs;
 import com.example.springboot_auto_properties.utils.RawFileKeyReader;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Service;
+
+import java.util.Locale;
 
 @Slf4j
 @RefreshScope
 @Service
 public class PulsarServiceImpl implements PulsarService {
     //YAML/Properties
-    @Value("${pulsar.service.url}")
-    private String SERVICE_URL;
-
     @Value("${pulsar.encryptedTopic}")
     private String ENCRYPTED_TOPIC_NAME;
 
-    @Value("${pulsar.topic}")
+    @Value("${pulsar.defaultTopic}")
     private String TOPIC_NAME;
-
-    @Value("${pulsar.client.user}")
-    private String PULSAR_CLIENT_USER;
-
-    @Value("${pulsar.client.password}")
-    private String PULSAR_CLIENT_PASSWORD;
-
-    @Value("${pulsar.client.authMethod}")
-    private String PULSAR_CLIENT_AUTHMETHOD;
 
     @Value("${pulsar.producer.defaultMsg}")
     private String PULSAR_PRODUCER_DEFAULT_MESSAGE;
@@ -37,8 +28,11 @@ public class PulsarServiceImpl implements PulsarService {
     @Value("${pulsar.producer.encryptedMsg}")
     private String PULSAR_PRODUCER_ENCRYPTED_MESSAGE;
 
-    @Value("${pulsar.consumer.subscription}")
-    private String PULSAR_CONSUMER_SUBSCRIPTION;
+    @Value("${pulsar.consumer.encryptedSubscription}")
+    private String PULSAR_CONSUMER_ENCRYPTED_SUBSCRIPTION;
+
+    @Value("${pulsar.consumer.defaultSubscription}")
+    private String PULSAR_CONSUMER_DEFAULT_SUBSCRIPTION;
 
     //Local
     private String LOCAL_PUB_KEY = "src/main/resources/test_ecdsa_pubkey.pem";
@@ -48,9 +42,28 @@ public class PulsarServiceImpl implements PulsarService {
     PulsarClient pulsarClient;
     Consumer pulsarConsumer;
     Producer<String> pulsarProducer;
+    Reader<byte[]> pulsarReader;
+    MessageId messageId;
 
     String errorMsg="";
     String topic="";
+
+    @Autowired
+    public PulsarServiceImpl(@Value("${pulsar.client.user}") String pulsarClientUser,
+                             @Value("${pulsar.client.password}") String pulsarClientPassword,
+                             @Value("${pulsar.client.authMethod}") String pulsarClientMethod,
+                             @Value("${pulsar.service.url}") String pulsarServiceUrl){
+        authSibs = new AuthenticationSibs(pulsarClientUser, pulsarClientPassword, pulsarClientMethod);
+
+        try {
+            pulsarClient = PulsarClient.builder()
+                    .serviceUrl(pulsarServiceUrl)
+                    .authentication(authSibs)
+                    .build();
+        } catch (PulsarClientException e) {
+            e.printStackTrace();
+        }
+    }
 
     private Producer<String> buildProducer() throws PulsarClientException {
         return pulsarClient.newProducer(Schema.STRING)
@@ -67,23 +80,17 @@ public class PulsarServiceImpl implements PulsarService {
     }
 
     @Override
-    public String produce(Boolean encrypted) {
-        authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
-
+    public String produce(Boolean encrypted, String message) {
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
         try {
-            pulsarClient = PulsarClient.builder()
-                    .serviceUrl(SERVICE_URL)
-                    .authentication(authSibs)
-                    .build();
-
             pulsarProducer = encrypted ? buildEncryptedProducer() : buildProducer();
 
             for (int i=0; i<10; i++) {
-                String content = encrypted ? PULSAR_PRODUCER_ENCRYPTED_MESSAGE + "-" + i : PULSAR_PRODUCER_DEFAULT_MESSAGE + "-" + i;
+                String content = ((message == null || message.isEmpty()) && encrypted) ? PULSAR_PRODUCER_ENCRYPTED_MESSAGE + "-" + i : (message == null || message.isEmpty()) ? PULSAR_PRODUCER_DEFAULT_MESSAGE + "-" + i : message + "-" + i;
 
                 log.info("******* Sending message: " + content);
                 MessageId msgId = pulsarProducer.send(content);
+                log.info("Message ID of sent message: " + msgId.toString());
             }
 
             pulsarProducer.close();
@@ -105,16 +112,9 @@ public class PulsarServiceImpl implements PulsarService {
 
     @Override
     public void consumeEncrypt() throws PulsarClientException {
-        authSibs = new AuthenticationSibs(PULSAR_CLIENT_USER, PULSAR_CLIENT_PASSWORD, PULSAR_CLIENT_AUTHMETHOD);
-
-        pulsarClient = PulsarClient.builder()
-                .serviceUrl(SERVICE_URL)
-                .authentication(authSibs)
-                .build();
-
         pulsarConsumer = pulsarClient.newConsumer()
                 .topic(TOPIC_NAME)
-                .subscriptionName(PULSAR_CONSUMER_SUBSCRIPTION)
+                .subscriptionName(PULSAR_CONSUMER_ENCRYPTED_SUBSCRIPTION)
                 .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
                 .subscribe();
         Message msg = null;
@@ -134,5 +134,61 @@ public class PulsarServiceImpl implements PulsarService {
     public void stopConsume() throws PulsarClientException {
         pulsarConsumer.close();
         pulsarClient.close();
+    }
+
+    /**
+     *
+     * @param encrypted
+     * @param messageId can be MessageId.earliest, MessageId.latest, <messageId>
+     */
+    @Override
+    public String read(Boolean encrypted, String messageId) {
+        topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
+
+        switch (messageId.toUpperCase()){
+            case "E":
+                this.messageId = MessageId.earliest;
+                break;
+            case "L":
+                this.messageId = MessageId.latest;
+                break;
+            default:
+                if (messageId != null && !messageId.isEmpty()){
+                    log.info("Trying to read messageId: " + messageId);
+                }
+                //byte[] msgIdBytes = // Some byte array
+                //this.messageId = MessageId.fromByteArray(msgIdBytes);
+                this.messageId = null;
+        }
+
+        if (this.messageId == null) {
+            return "MessageId is not valid";
+        }
+
+        try {
+            pulsarReader = pulsarClient.newReader()
+                    .topic(topic)
+                    .startMessageId(this.messageId)
+                    .create();
+        } catch (PulsarClientException e) {
+            log.error("Error reading from Pulsar Topic: " + topic);
+            e.printStackTrace();
+        }
+
+        if (pulsarReader != null) {
+            while(true){
+                try {
+                    Message message = pulsarReader.readNext();
+                    log.info("Pulsar Reader | Message Id: " + message.getMessageId().toString());
+                    log.info("Pulsar Reader | Message producer: " + message.getProducerName());
+                    log.info("Pulsar Reader | Message string: " + message.toString());
+                } catch (PulsarClientException e) {
+                    log.error("Error reading message");
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return "Finished reading";
     }
 }
