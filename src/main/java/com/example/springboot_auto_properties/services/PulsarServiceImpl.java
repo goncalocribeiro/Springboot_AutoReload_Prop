@@ -61,7 +61,31 @@ public class PulsarServiceImpl implements PulsarService {
                              @Value("${pulsar.client.password}") String pulsarClientPassword,
                              @Value("${pulsar.client.authMethod}") String pulsarClientMethod,
                              @Value("${pulsar.service.url}") String pulsarServiceUrl){
-        authSibs = new AuthenticationSibs(pulsarClientUser, pulsarClientPassword, pulsarClientMethod);
+
+        buildAuthClient(pulsarClientUser, pulsarClientPassword, pulsarClientMethod, pulsarServiceUrl);
+    }
+
+    private void buildAuthClient(String pulsarClientUser,
+                                 String pulsarClientPassword,
+                                 String pulsarClientMethod,
+                                 String pulsarServiceUrl){
+        switch (pulsarClientMethod.toUpperCase()){
+            case "ADMIN":
+                authSibs = AuthenticationSibs.BuildAdminAuth(pulsarClientUser, pulsarClientPassword);
+                break;
+            case "LOCAL":
+                authSibs = AuthenticationSibs.BuildLocalAuth(pulsarClientUser, pulsarClientPassword);
+                break;
+            case "LDAP":
+                authSibs = AuthenticationSibs.BuildLDAPAuth(pulsarClientUser, pulsarClientPassword);
+                break;
+            case "CERT":
+                //TO DO
+                authSibs = null;
+                break;
+            default:
+                authSibs = null;
+        }
 
         try {
             pulsarClient = PulsarClient.builder()
@@ -87,6 +111,12 @@ public class PulsarServiceImpl implements PulsarService {
                 .create();
     }
 
+    /**
+     *
+     * @param encrypted: should produce to encrypted topic
+     * @param message: message to be sent. If no message,then will send static message in .properties
+     * @return String value
+     */
     @Override
     public String produce(Boolean encrypted, String message) {
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
@@ -188,7 +218,7 @@ public class PulsarServiceImpl implements PulsarService {
         try {
             pulsarReader = pulsarClient.newReader()
                     .topic(topic)
-                    .subscriptionName(PULSAR_READER_SUBSCRIPTION)
+                    //.subscriptionName(PULSAR_READER_SUBSCRIPTION)
                     .startMessageId(this.messageId)
                     .create();
         } catch (PulsarClientException e) {
