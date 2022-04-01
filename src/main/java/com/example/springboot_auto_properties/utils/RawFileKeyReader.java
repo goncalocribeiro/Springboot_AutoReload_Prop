@@ -1,5 +1,7 @@
 package com.example.springboot_auto_properties.utils;
 
+import lombok.Builder;
+import lombok.Setter;
 import org.apache.pulsar.client.api.CryptoKeyReader;
 import org.apache.pulsar.client.api.EncryptionKeyInfo;
 
@@ -8,14 +10,18 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Map;
 
+@Setter
+@Builder
 public class RawFileKeyReader implements CryptoKeyReader {
 
     String publicKeyFile = "";
     String privateKeyFile = "";
 
-    public RawFileKeyReader(String pubKeyFile, String prvKeyFile) {
-        publicKeyFile = pubKeyFile;
-        privateKeyFile = prvKeyFile;
+    public RawFileKeyReader(){}
+
+    public RawFileKeyReader(String publicKeyFile, String privateKeyFile) {
+        this.publicKeyFile = publicKeyFile;
+        this.privateKeyFile = privateKeyFile;
     }
 
     @Override

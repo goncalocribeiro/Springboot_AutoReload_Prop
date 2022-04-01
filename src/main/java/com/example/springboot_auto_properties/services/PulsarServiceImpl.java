@@ -66,7 +66,9 @@ public class PulsarServiceImpl implements PulsarService {
                              @Value("${pulsar.service.url}") String pulsarServiceUrl){
 
         buildAuthClient(pulsarClientUser, pulsarClientPassword, pulsarClientMethod, pulsarServiceUrl);
-        rawFileKeyReader = new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY);
+        rawFileKeyReader = new RawFileKeyReader();
+        rawFileKeyReader.setPrivateKeyFile(LOCAL_PRV_KEY);
+        rawFileKeyReader.setPublicKeyFile(LOCAL_PUB_KEY);
     }
 
     private void buildAuthClient(String pulsarClientUser,
