@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RefreshScope
@@ -52,9 +53,11 @@ public class PulsarServiceImpl implements PulsarService {
     Producer<String> pulsarProducer;
     Reader<byte[]> pulsarReader;
     MessageId messageId;
+    RawFileKeyReader rawFileKeyReader;
 
     String errorMsg="";
     String topic="";
+    String subscriptionName="";
 
     @Autowired
     public PulsarServiceImpl(@Value("${pulsar.client.user}") String pulsarClientUser,
@@ -63,6 +66,7 @@ public class PulsarServiceImpl implements PulsarService {
                              @Value("${pulsar.service.url}") String pulsarServiceUrl){
 
         buildAuthClient(pulsarClientUser, pulsarClientPassword, pulsarClientMethod, pulsarServiceUrl);
+        rawFileKeyReader = new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY);
     }
 
     private void buildAuthClient(String pulsarClientUser,
@@ -107,8 +111,26 @@ public class PulsarServiceImpl implements PulsarService {
         return pulsarClient.newProducer(Schema.STRING)
                 .topic(topic)
                 .addEncryptionKey("myAppTestKey")
-                .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
+                .cryptoKeyReader(this.rawFileKeyReader)
                 .create();
+    }
+
+    private Consumer buildConsumer(MessageListener pulsarMessageListener) throws PulsarClientException {
+        return pulsarConsumer = pulsarClient.newConsumer()
+                .topic(topic)
+                .subscriptionName(subscriptionName)
+                .subscriptionType(SubscriptionType.Shared)
+                .messageListener(pulsarMessageListener)
+                .subscribe();
+    }
+
+    private Consumer buildEncryptedConsumer(MessageListener pulsarMessageListener) throws PulsarClientException {
+        return pulsarClient.newConsumer()
+                .topic(topic)
+                .subscriptionName(subscriptionName)
+                .messageListener(pulsarMessageListener)
+                .cryptoKeyReader(this.rawFileKeyReader)
+                .subscribe();
     }
 
     /**
@@ -131,8 +153,8 @@ public class PulsarServiceImpl implements PulsarService {
                 log.info("Message ID of sent message: " + msgId.toString());
             }
 
-            pulsarProducer.close();
-            pulsarClient.close();
+            //pulsarProducer.close();
+            //pulsarClient.close();
         } catch (PulsarClientException e) {
             errorMsg = "Error creating Pulsar Producer";
             log.error(errorMsg);
@@ -149,29 +171,27 @@ public class PulsarServiceImpl implements PulsarService {
     }
 
     @Override
-    public void consumeEncrypt() throws PulsarClientException {
-        pulsarConsumer = pulsarClient.newConsumer()
-                .topic(TOPIC_NAME)
-                .subscriptionName(PULSAR_CONSUMER_ENCRYPTED_SUBSCRIPTION)
-                .cryptoKeyReader(new RawFileKeyReader(LOCAL_PUB_KEY, LOCAL_PRV_KEY))
-                .subscribe();
-        Message msg = null;
+    public void consume(Boolean encrypted) throws PulsarClientException {
+        topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
+        subscriptionName = encrypted ? PULSAR_CONSUMER_ENCRYPTED_SUBSCRIPTION : PULSAR_CONSUMER_DEFAULT_SUBSCRIPTION;
 
-        while(true) {
-            msg = pulsarConsumer.receive();
-            // do something
-            System.out.println("Received: " + new String(msg.getData()));
-            pulsarConsumer.acknowledge(msg);
-        }
+        //Avoid mainthread and request to be locked
+        MessageListener pulsarMessageListener = (consumer, receivedMsg) -> {
+            try{
+                System.out.println("Received: " + new String(receivedMsg.getData()));
+                consumer.acknowledge(receivedMsg);
+            } catch (Exception e) {
+                consumer.negativeAcknowledge(receivedMsg);
+            }
+        };
 
-        // Acknowledge the consumption of all messages at once
-        //consumer.acknowledgeCumulative(msg);
+        pulsarConsumer = encrypted ? buildEncryptedConsumer(pulsarMessageListener) : buildConsumer(pulsarMessageListener);
     }
 
     @Override
     public void stopConsume() throws PulsarClientException {
         pulsarConsumer.close();
-        pulsarClient.close();
+        //pulsarClient.close();
     }
 
     /**

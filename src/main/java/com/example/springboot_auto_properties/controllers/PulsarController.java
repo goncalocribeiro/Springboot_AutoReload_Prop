@@ -48,9 +48,9 @@ public class PulsarController {
      * All the needed properties are settled in the .properties file in github repository: https://github.com/goncalocribeiro/SpringbootConfigRepo
      * @throws PulsarClientException
      */
-    @PostMapping(value="/consumeEncrypt")
-    public void consumeEncrypt() throws PulsarClientException {
-        pulsarService.consumeEncrypt();
+    @PostMapping(value="/consume")
+    public void consume(@RequestParam Boolean encrypted) throws PulsarClientException {
+        pulsarService.consume(encrypted);
     }
 
     /**
