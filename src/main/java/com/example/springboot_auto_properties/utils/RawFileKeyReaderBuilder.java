@@ -1,8 +1,5 @@
 package com.example.springboot_auto_properties.utils;
 
-import lombok.Getter;
-import lombok.Setter;
-
 public class RawFileKeyReaderBuilder {
     String publicKeyFile = "";
     String privateKeyFile = "";
