@@ -8,7 +8,7 @@ import java.io.IOException;
 
 @Service
 public interface PulsarService {
-    public String produce(Boolean encrypted, String message);
+    public String produce(Boolean encrypted, String message, Integer n_msg);
     public void consume(Boolean encrypted) throws PulsarClientException;
     public void stopConsume() throws PulsarClientException;
     public String read(Boolean encrypted, String messageId, Boolean readOnlyOnce) throws IOException;

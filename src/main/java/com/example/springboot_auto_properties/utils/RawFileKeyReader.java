@@ -17,8 +17,6 @@ public class RawFileKeyReader implements CryptoKeyReader {
     String publicKeyFile = "";
     String privateKeyFile = "";
 
-    public RawFileKeyReader(){}
-
     public RawFileKeyReader(String publicKeyFile, String privateKeyFile) {
         this.publicKeyFile = publicKeyFile;
         this.privateKeyFile = privateKeyFile;

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.validation.constraints.Min;
 import java.io.IOException;
 
 @RestController
@@ -39,8 +40,9 @@ public class PulsarController {
      */
     @PostMapping(value="/produce")
     public ResponseEntity<String> produce(@RequestParam Boolean encrypted,
-                                          @RequestParam String msg) {
-        return ResponseEntity.ok(pulsarService.produce(encrypted, msg));
+                                          @RequestParam String msg,
+                                          @RequestParam @Min(1) Integer n_msg) {
+        return ResponseEntity.ok(pulsarService.produce(encrypted, msg, n_msg));
     }
 
     /**
