@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -165,7 +166,15 @@ public class PulsarServiceImpl implements PulsarService {
 
                 log.info("******* Sending message: " + content);
                 MessageId msgId = pulsarProducer.send(content);
+
+                //Send a message after 10 seconds
+                MessageId delayedMsgId = pulsarProducer
+                        .newMessage()
+                        .deliverAfter(60, TimeUnit.SECONDS)
+                        .value(content)
+                        .send();
                 log.info("Message ID of sent message: " + msgId.toString());
+                log.info("Message ID of delay sent message: " + delayedMsgId.toString());
             }
 
             //pulsarProducer.close();
@@ -217,8 +226,10 @@ public class PulsarServiceImpl implements PulsarService {
      */
     @Override
     public String read(Boolean encrypted, String messageId, Boolean readOnlyOnce) throws IOException {
+        int counter = 0;
+        ArrayList<String> readMessages = new ArrayList<String>();
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
-        log.info("Reading from topic: " + topic);
+        log.info("Start reading from topic: " + this.topic);
 
         switch (messageId.toUpperCase()){
             case "E":
@@ -269,6 +280,9 @@ public class PulsarServiceImpl implements PulsarService {
                     log.info("Pulsar Reader | Message producer: " + message.getProducerName());
                     log.info("Pulsar Reader | Message string: " + new String(message.getData()));
 
+                    readMessages.add(new String(message.getData()));
+                    counter++;
+
                     if (readOnlyOnce) {
                         //Reads only one message
                         break;
@@ -278,9 +292,10 @@ public class PulsarServiceImpl implements PulsarService {
                     e.printStackTrace();
                 }
             }
-        }
 
-        pulsarReader.close(); //to delete reader subscription
-        return "Finished reading";
+            log.info("Finished reading from topic: " + this.topic);
+            pulsarReader.close(); //to delete reader subscription
+        }
+        return "Finished reading " + counter + " messages. Messages list: " + readMessages.toString();
     }
 }
