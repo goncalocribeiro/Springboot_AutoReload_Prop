@@ -1,13 +1,18 @@
 package com.example.springboot_auto_properties.services;
 
-import client.AuthenticationSibs;
 import com.example.springboot_auto_properties.utils.RawFileKeyReader;
 import com.example.springboot_auto_properties.utils.RawFileKeyReaderBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pulsar.client.admin.Clusters;
+import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.api.*;
 import org.apache.pulsar.client.impl.BatchMessageIdImpl;
 import org.apache.pulsar.client.impl.MessageIdImpl;
+import org.apache.pulsar.client.impl.auth.AuthenticationTls;
 import org.apache.pulsar.common.api.raw.RawMessage;
+import org.apache.pulsar.common.policies.data.ClusterData;
+import org.apache.pulsar.common.policies.data.FailureDomain;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
@@ -16,7 +21,9 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -45,11 +52,13 @@ public class PulsarServiceImpl implements PulsarService {
     @Value("${pulsar.reader.defaultSubscription}")
     private String PULSAR_READER_SUBSCRIPTION;
 
+    private String authPlugin;
+    private String authParams;
+
     //Local
     private String LOCAL_PUB_KEY = "src/main/resources/test_ecdsa_pubkey.pem";
     private String LOCAL_PRV_KEY = "src/main/resources/test_ecdsa_prvkey.pem";
 
-    AuthenticationSibs authSibs;
     PulsarClient pulsarClient;
     Consumer pulsarConsumer;
     Producer<String> pulsarProducer;
@@ -57,47 +66,50 @@ public class PulsarServiceImpl implements PulsarService {
     MessageId messageId;
     RawFileKeyReader producerCryptoReader;
     RawFileKeyReader consumerCryptoReader;
+    PulsarAdmin pulsarAdmin;
 
     String errorMsg="";
     String topic="";
     String subscriptionName="";
 
     @Autowired
-    public PulsarServiceImpl(@Value("${pulsar.client.user}") String pulsarClientUser,
-                             @Value("${pulsar.client.password}") String pulsarClientPassword,
-                             @Value("${pulsar.client.authMethod}") String pulsarClientMethod,
-                             @Value("${pulsar.service.url}") String pulsarServiceUrl){
-
-        buildAuthClient(pulsarClientUser, pulsarClientPassword, pulsarClientMethod, pulsarServiceUrl);
+    public PulsarServiceImpl(@Value("${pulsar.service.url}") String pulsarServiceUrl,
+                             @Value("${pulsar.admin.url}") String pulsarAdminUrl,
+                             @Value("${pulsar.client.cert}") String clientPubKey,
+                             @Value("${pulsar.client.key}") String clientPrvKey,
+                             @Value("${pulsar.trusted.ca}") String trustCaCert,
+                             @Value("${pulsar.authPlugin}") String authPlugin,
+                             @Value("${pulsar.authParams}") String authParams){
+        this.authPlugin = authPlugin;
+        this.authParams = authParams;
+        buildAuthClient(pulsarServiceUrl, trustCaCert);
+        buildPulsarAdmin(pulsarAdminUrl, trustCaCert);
     }
 
-    private void buildAuthClient(String pulsarClientUser,
-                                 String pulsarClientPassword,
-                                 String pulsarClientMethod,
-                                 String pulsarServiceUrl){
-        switch (pulsarClientMethod.toUpperCase()){
-            case "ADMIN":
-                authSibs = AuthenticationSibs.BuildAdminAuth(pulsarClientUser, pulsarClientPassword);
-                break;
-            case "LOCAL":
-                authSibs = AuthenticationSibs.BuildLocalAuth(pulsarClientUser, pulsarClientPassword);
-                break;
-            case "LDAP":
-                authSibs = AuthenticationSibs.BuildLDAPAuth(pulsarClientUser, pulsarClientPassword);
-                break;
-            case "CERT":
-                //TO DO
-                authSibs = null;
-                break;
-            default:
-                authSibs = null;
-        }
-
+    private void buildAuthClient(String pulsarServiceUrl,
+                                 String trustCaCert){
         try {
             pulsarClient = PulsarClient.builder()
                     .serviceUrl(pulsarServiceUrl)
-                    .authentication(authSibs)
+                    .tlsTrustCertsFilePath(trustCaCert)
+                    .authentication(this.authPlugin, this.authParams)
                     .build();
+        } catch (PulsarClientException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void buildPulsarAdmin(String pulsarAdminUrl,
+                                 String trustCaCert){
+        try{
+            this.pulsarAdmin = PulsarAdmin.builder()
+                    .authentication(this.authPlugin, this.authParams)
+                    .serviceHttpUrl(pulsarAdminUrl)
+                    .tlsTrustCertsFilePath(trustCaCert)
+                    .allowTlsInsecureConnection(false)
+                    .build();
+        } catch (PulsarClientException.UnsupportedAuthenticationException e) {
+            e.printStackTrace();
         } catch (PulsarClientException e) {
             e.printStackTrace();
         }
@@ -135,6 +147,7 @@ public class PulsarServiceImpl implements PulsarService {
                 .topic(topic)
                 .subscriptionName(subscriptionName)
                 .subscriptionType(SubscriptionType.Shared)
+                .subscriptionInitialPosition(SubscriptionInitialPosition.Latest)
                 .messageListener(pulsarMessageListener)
                 .subscribe();
     }
@@ -156,7 +169,7 @@ public class PulsarServiceImpl implements PulsarService {
      * @return String value
      */
     @Override
-    public String produce(Boolean encrypted, String message, Integer n_msg) {
+    public String produce(Boolean encrypted, String message, Integer n_msg) throws PulsarClientException {
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
         try {
             pulsarProducer = encrypted ? buildEncryptedProducer() : buildProducer();
@@ -191,6 +204,7 @@ public class PulsarServiceImpl implements PulsarService {
             return errorMsg;
         }
 
+        pulsarProducer.close();
         return "Success sending messages";
     }
 
@@ -198,6 +212,7 @@ public class PulsarServiceImpl implements PulsarService {
     public void consume(Boolean encrypted) throws PulsarClientException {
         topic = encrypted ? ENCRYPTED_TOPIC_NAME : TOPIC_NAME;
         subscriptionName = encrypted ? PULSAR_CONSUMER_ENCRYPTED_SUBSCRIPTION : PULSAR_CONSUMER_DEFAULT_SUBSCRIPTION;
+
 
         //Avoid mainthread and request to be locked
         MessageListener pulsarMessageListener = (consumer, receivedMsg) -> {
@@ -260,6 +275,10 @@ public class PulsarServiceImpl implements PulsarService {
         if (this.messageId == null) {
             return "MessageId is not valid";
         }
+        /*
+        * subsA
+        * ------------------------ consumer.subscription()
+        * */
 
         try {
             pulsarReader = pulsarClient.newReader()
@@ -271,6 +290,7 @@ public class PulsarServiceImpl implements PulsarService {
             log.error("Error reading from Pulsar Topic: " + topic);
             e.printStackTrace();
         }
+
 
         if (pulsarReader != null) {
             while(pulsarReader.hasMessageAvailable()){
@@ -297,5 +317,37 @@ public class PulsarServiceImpl implements PulsarService {
             pulsarReader.close(); //to delete reader subscription
         }
         return "Finished reading " + counter + " messages. Messages list: " + readMessages.toString();
+    }
+
+    public String admin() throws PulsarAdminException {
+        List<String> tenantsList = pulsarAdmin.tenants().getTenants();
+
+        Clusters clusters = pulsarAdmin.clusters();
+        List<String> clustersList = clusters.getClusters();
+        ClusterData clusterData = clusters.getCluster("standalone");
+
+        log.info("serviceUrl: ", clusterData.getServiceUrl());
+        log.info("serviceUrlTls: ", clusterData.getServiceUrlTls());
+        log.info("brokerServiceUrl: ", clusterData.getBrokerServiceUrl());
+        log.info("brokerServiceUrlTls: ", clusterData.getBrokerServiceUrlTls());
+
+        /*List<String> clustersList = pulsarAdmin.clusters().getClusters();
+        Map<String, FailureDomain> failureDomains = pulsarAdmin.clusters().getFailureDomains("standalone");*/
+
+        /*for (String tenant: tenantsList) {
+            log.info("Tenant: " + tenant);
+        }
+
+        return tenantsList.toString();*/
+
+        /*for (String cluster : clustersList) {
+            log.info("Cluster: " + cluster);
+        }
+
+        for (String failureDomain : failureDomains.keySet()) {
+            log.info("Failure domain: " + failureDomain.toString());
+        }*/
+
+        return clustersList.toString();
     }
 }

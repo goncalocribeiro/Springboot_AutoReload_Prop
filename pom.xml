@@ -13,10 +13,14 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>springboot_auto_properties</name>
     <description>springboot_auto_properties</description>
+
     <properties>
         <java.version>11</java.version>
         <spring-cloud.version>2021.0.1</spring-cloud.version>
+        <jetty.version>9.4.48.v20220622</jetty.version>
+        <conscrypt.version>2.5.2</conscrypt.version>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -60,9 +64,28 @@
             <artifactId>pulsar-client</artifactId>
             <version>2.9.1</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.pulsar</groupId>
+            <artifactId>pulsar-client-admin</artifactId>
+            <version>2.9.1</version>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-alpn-conscrypt-server</artifactId>
+            <version>${jetty.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.conscrypt</groupId>
+            <artifactId>conscrypt-openjdk-uber</artifactId>
+            <version>${conscrypt.version}</version>
         </dependency>
     </dependencies>
 

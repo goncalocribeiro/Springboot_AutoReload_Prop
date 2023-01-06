@@ -2,6 +2,7 @@ package com.example.springboot_auto_properties.controllers;
 
 import com.example.springboot_auto_properties.services.PulsarService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,7 +42,7 @@ public class PulsarController {
     @PostMapping(value="/produce")
     public ResponseEntity<String> produce(@RequestParam Boolean encrypted,
                                           @RequestParam String msg,
-                                          @RequestParam @Min(1) Integer n_msg) {
+                                          @RequestParam @Min(1) Integer n_msg) throws PulsarClientException {
         return ResponseEntity.ok(pulsarService.produce(encrypted, msg, n_msg));
     }
 
@@ -69,5 +70,10 @@ public class PulsarController {
                                                  @RequestParam String messageId,
                                                  @RequestParam Boolean readOnlyOnce) throws IOException {
         return ResponseEntity.ok(pulsarService.read(encrypted, messageId, readOnlyOnce));
+    }
+
+    @PostMapping(value="/admin")
+    public ResponseEntity<String> admin() throws PulsarAdminException {
+        return ResponseEntity.ok(pulsarService.admin());
     }
 }
